@@ -1,37 +1,48 @@
 // Agrega a MySQL los validadores de una pestaña de un archivo .xlsx. No borra nada:
 // los seriales que ya existen se saltan.
-// Uso: node import-xlsx.js <archivo.xlsx> "<pestaña>" [--dry]
-//   --dry  solo muestra qué se importaría, sin escribir.
+// Uso: node import-xlsx.js <archivo.xlsx> "<pestaña>" [--dry] [--replace]
+//   --dry      solo muestra qué se importaría, sin escribir.
+//   --replace  borra de MySQL todas las filas de los seriales de esa pestaña y las vuelve a cargar
+//              desde el archivo (para ponerse al día con la planilla; pierde lo cargado en el dashboard).
 import readXlsxFile from 'read-excel-file/node';
 import { pool } from './db.js';
 import { parseDate } from './lib.js';
 
 const [file, sheetName] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const dry = process.argv.includes('--dry');
+const replace = process.argv.includes('--replace');
 if (!file || !sheetName) {
   console.error('Uso: node import-xlsx.js <archivo.xlsx> "<pestaña>" [--dry]');
   process.exit(1);
 }
 
 const sheets = await readXlsxFile(file);
-const sheet = sheets.find((s) => s.sheet.trim().toLowerCase() === sheetName.trim().toLowerCase());
+// Excel corta los nombres de pestaña a 31 letras: se acepta el nombre exacto o una parte única.
+const want = sheetName.trim().toLowerCase();
+const matches = sheets.filter((s) => s.sheet.trim().toLowerCase() === want);
+const sheet = matches[0] ?? (() => {
+  const part = sheets.filter((s) => s.sheet.trim().toLowerCase().includes(want) || want.includes(s.sheet.trim().toLowerCase()));
+  return part.length === 1 ? part[0] : null;
+})();
 if (!sheet) {
-  console.error(`No existe la pestaña "${sheetName}". Pestañas: ${sheets.map((s) => s.sheet).join(', ')}`);
+  console.error(`No encontré una pestaña única para "${sheetName}". Pestañas: ${sheets.map((s) => s.sheet).join(' | ')}`);
   process.exit(1);
 }
 
 const norm = (v) => String(v ?? '').trim().toUpperCase().replace(/\s+/g, ' ').replace(/:$/, '');
-const headerAt = sheet.data.findIndex((r) => r.some((c) => norm(c) === 'SERIALES DEL VALIDADOR'));
+const headerAt = sheet.data.findIndex((r) => r.some((c) => norm(c).startsWith('SERIALES DEL VALID')));
 if (headerAt < 0) { console.error('No encontré la fila de títulos (SERIALES DEL VALIDADOR).'); process.exit(1); }
-const header = sheet.data[headerAt].map(norm);
-const col = (...names) => header.findIndex((h) => names.includes(h));
-const C = {
-  id: col('ID DE TELPOS'), serial: col('SERIALES DEL VALIDADOR'), donde: col('DONDE ESTA'), asignado: col('ASIGNADO A'),
-  coche: col('COCHE', 'COCHES'), empresa: col('EMPRESAS', 'EMPRESA'),
-  inst: col('FECHA INSTALACION'), retiro: col('FECHA DE RETIRO'),
-};
-// Hojas con una sola columna sin título al lado del serial: ahí van técnicos, CAS o MUERTO.
-const mixta = C.donde < 0 && C.asignado < 0 ? C.serial + 1 : -1;
+const serialCol = sheet.data[headerAt].findIndex((c) => norm(c).startsWith('SERIALES DEL VALID'));
+// Los títulos a veces quedan en otra fila o en blanco, así que las columnas se ubican por posición
+// respecto al serial. Hay dos formatos: con "ASIGNADO A" (hoja B) o con una sola columna sin título (hojas A).
+const cabecera = sheet.data.slice(Math.max(0, headerAt - 2), headerAt + 1).flat().map(norm);
+const conAsignado = cabecera.includes('ASIGNADO A');
+const S = serialCol;
+const C = conAsignado
+  ? { id: S - 1, serial: S, donde: S + 1, asignado: S + 2, coche: S + 3, empresa: S + 4, inst: S + 5, retiro: S + 7 }
+  : { id: S - 1, serial: S, coche: S + 2, empresa: S + 3, inst: S + 4, retiro: S + 6 };
+const mixta = conAsignado ? -1 : S + 1;
+console.log(`Formato detectado: ${conAsignado ? 'con DONDE ESTA / ASIGNADO A' : 'columna única de ubicación'}.`);
 
 const BAD = new Set(['CAS', 'MUERTO', 'MUERTV', 'MUERTOV', 'SINIESTRADO']);
 const text = (v) => {
@@ -82,7 +93,7 @@ const rows = [];
 let ignoradas = 0;
 sheet.data.slice(headerAt + 1).forEach((r, i) => {
   const serial = text(r[C.serial]).toUpperCase();
-  if (!/^[A-Z]\d{6}[A-Z]\d{8}$/.test(serial)) { if (r.some((c) => c != null)) ignoradas++; return; }
+  if (!/^[A-Z]\d{6}[A-Z]\d{7,8}$/.test(serial)) { if (r.some((c) => c != null)) ignoradas++; return; }
   const fila = headerAt + 2 + i;
   let donde = C.donde >= 0 ? text(r[C.donde]) : '';
   let asignado = C.asignado >= 0 ? text(r[C.asignado]) : '';
@@ -95,13 +106,17 @@ sheet.data.slice(headerAt + 1).forEach((r, i) => {
     inst, date(r[C.retiro], fila, 'retiro', inst)]);
 });
 
-const [ya] = await pool.query('SELECT DISTINCT serial FROM movimientos');
+const [ya] = await pool.query('SELECT serial, COUNT(*) n FROM movimientos GROUP BY serial');
 const existentes = new Set(ya.map((x) => x.serial));
-const nuevos = rows.filter((r) => !existentes.has(r[0]));
+const nuevos = replace ? rows : rows.filter((r) => !existentes.has(r[0]));
+if (replace) {
+  const borrar = ya.filter((x) => rows.some((r) => r[0] === x.serial));
+  console.log(`  --replace: se borrarían ${borrar.reduce((a, x) => a + Number(x.n), 0)} filas de ${borrar.length} seriales ya cargados y se volverían a cargar`);
+}
 const seriales = (arr) => new Set(arr.map((r) => r[0])).size;
 
 console.log(`Pestaña "${sheet.sheet}": ${rows.length} filas con serial (${seriales(rows)} seriales).`);
-console.log(`  ya existen en MySQL: ${seriales(rows) - seriales(nuevos)} seriales (se saltan)`);
+if (!replace) console.log(`  ya existen en MySQL: ${seriales(rows) - seriales(nuevos)} seriales (se saltan)`);
 console.log(`  a importar: ${nuevos.length} filas, ${seriales(nuevos)} seriales nuevos`);
 if (ignoradas) console.log(`  filas sin serial válido ignoradas: ${ignoradas}`);
 warnings.forEach((w) => console.log('  AVISO', w));
@@ -112,6 +127,7 @@ if (dry || !nuevos.length) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    if (replace) await conn.query('DELETE FROM movimientos WHERE serial IN (?)', [[...new Set(rows.map((r) => r[0]))]]);
     await conn.query(
       'INSERT INTO movimientos (serial, telpo_id, donde, asignado, coche, empresa, fecha_instalacion, fecha_retiro) VALUES ?',
       [nuevos]);

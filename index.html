@@ -102,8 +102,8 @@ function buildDup(){
 }
 const sharedIds=d=>[d.telpo_id,...d.ids_ant].filter(x=>x&&IDMAP[x]?.size>1);
 const dupTotal=()=>DATA.filter(d=>sharedIds(d).length).length;
-const LOTES=['B viejo','A viejo','A nuevo','Otros'];
-const LOTE_LABEL={'B viejo':'B viejo (2021)','A viejo':'A viejo','A nuevo':'A nuevo (2024)',Otros:'Otros'};
+const LOTES=['B viejo','Telpo viejo','Versión A viejos','Versión A nuevos','Otros'];
+const LOTE_LABEL={'B viejo':'B viejo','Telpo viejo':'Telpo viejo (A)','Versión A viejos':'Versión A · viejos','Versión A nuevos':'Versión A · nuevos',Otros:'Otros'};
 function render(){
   const base=DATA.filter(d=>!lote||d.lote===lote);
   const cnt=k=>base.filter(d=>d.estado===k).length;

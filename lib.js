@@ -18,8 +18,9 @@ export const today = () => new Date().toISOString().slice(0, 10);
 // Grupo (lote) de un validador, según el prefijo de su serial.
 export function loteDe(serial) {
   if (/^B(19|17)0530/.test(serial)) return 'B viejo';
-  if (/^A(13|17)0530/.test(serial)) return 'A viejo';
-  if (/^A290530/.test(serial)) return 'A nuevo';
+  if (/^A(13|17)0530/.test(serial)) return 'Telpo viejo';
+  if (/^A290530/.test(serial)) return 'Versión A viejos';
+  if (/^A550530/.test(serial)) return 'Versión A nuevos';
   return 'Otros';
 }
 
