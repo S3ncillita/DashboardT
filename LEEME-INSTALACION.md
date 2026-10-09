@@ -1,5 +1,20 @@
 # Dashboard Telpo: instalación en la NUC (Windows 10)
 
+## Con auto-deploy (recomendado, igual que la app de música)
+En un cmd **como Administrador**:
+
+    git clone https://github.com/S3ncillita/DashboardT.git C:\dashboardTelpo
+    cd C:\dashboardTelpo\deploy
+    powershell -ExecutionPolicy Bypass -File setup-windows.ps1
+
+Pide la contraseña de root de MySQL y los usuarios del dashboard. Después, cada `git push` a `main`
+se despliega solo en 2 minutos. NO instala otro MySQL: el deploy de la app de música apaga
+cualquier MySQL que no sea el suyo, así que el dashboard usa el que ya está en el puerto 3306.
+Dashboard en `http://IP_DE_LA_NUC:8000`. Logs: `pm2 logs telpo-dashboard`.
+
+---
+## Instalación manual (alternativa)
+
 ## Forma rápida
 Haz el paso 3 (usuario de MySQL) y después clic derecho en `instalar.bat` → "Ejecutar como administrador".
 Te pregunta los datos de MySQL, carga la planilla, crea tus usuarios, abre el firewall y programa el arranque automático.
