@@ -13,6 +13,17 @@ cualquier MySQL que no sea el suyo, así que el dashboard usa el que ya está en
 Dashboard en `http://IP_DE_LA_NUC:8000`. Logs: `pm2 logs telpo-dashboard`.
 
 ---
+## Cargar otra pestaña de la planilla (sin borrar lo que ya hay)
+1. Descarga la planilla como .xlsx y cópiala a la NUC, por ejemplo en `C:\dashboardTelpo\datos\planilla.xlsx`
+   (la carpeta `datos` no se sube a GitHub).
+2. Prueba primero, sin guardar nada:
+
+       node import-xlsx.js datos\planilla.xlsx "Nuevo validadores" --dry
+
+3. Si el resumen está bien, repite el comando sin `--dry`. Los seriales que ya existen se saltan,
+   así que se puede correr más de una vez sin duplicar.
+
+---
 ## Instalación manual (alternativa)
 
 ## Forma rápida

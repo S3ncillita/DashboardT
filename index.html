@@ -14,6 +14,7 @@ h1{font-size:20px;margin:0}.mut{color:var(--mut);font-size:12px}
 button,input,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:7px 10px}
 button{cursor:pointer}button:hover{border-color:var(--ac)}
 main{padding:0 16px 24px;max-width:1300px;margin:auto}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tab{padding:8px 14px}.tab.on{background:var(--ac);color:#fff;border-color:var(--ac)}.tab.on .mut{color:#fff;opacity:.8}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
 .kpi{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px;cursor:pointer;border-left:4px solid var(--c)}
 .kpi.on{outline:2px solid var(--ac)}.kpi b{display:block;font-size:26px}
@@ -43,12 +44,12 @@ button.pri{background:var(--ac);color:#fff;border:0}
   <div style="display:flex;gap:8px;align-items:center"><button id="new">+ Nueva instalación</button><button id="tecs">Técnicos</button><button id="reload">Actualizar</button><span class="mut" id="me"></span><button id="out">Salir</button></div>
 </header>
 <main>
+  <div class="tabs" id="tabs"></div>
   <div class="kpis" id="kpis"></div>
   <div class="panel"><b>Instalados por empresa</b> <span class="mut">(clic para filtrar)</span><div class="bars" id="bars"></div></div>
   <div class="panel">
     <div class="tools">
       <input id="q" placeholder="Buscar: solo números = terminación del serial (ej. 465); o ID Telpo, coche, empresa…">
-      <select id="tipo"></select>
       <button id="dup" type="button"></button>
       <select id="est"></select>
     </div>
@@ -63,14 +64,14 @@ button.pri{background:var(--ac);color:#fff;border:0}
 <script>
 const COLORS={Instalado:'var(--ok)',Disponible:'var(--free)','Con técnico':'#8b5cf6','En CAS':'#0ea5e9',Retirado:'var(--off)',Dañado:'var(--bad)'};
 const PL={Instalado:'Instalados',Disponible:'Disponibles','Con técnico':'Con técnico','En CAS':'En CAS',Retirado:'Retirados',Dañado:'Dañados'};
-const COLS=[['tipo','Tipo'],['telpo_id','ID Telpo'],['serial','Serial validador'],['estado','Estado'],['donde','Dónde está'],
+const COLS=[['lote','Lote'],['telpo_id','ID Telpo'],['serial','Serial validador'],['estado','Estado'],['donde','Dónde está'],
 ['asignado','Asignado a'],['coche','Coche'],['empresa','Empresa'],['instalacion','Instalación'],['dias','Días activos'],['retiro','Retiro'],['movimientos','Mov.']];
-let TEC=[],DATA=[],estado='',empresa='',tipo='',soloDup=false,IDMAP={},sort=['serial',1];
+let TEC=[],DATA=[],estado='',empresa='',lote='',soloDup=false,IDMAP={},sort=['serial',1];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fd=s=>s?s.split('-').reverse().join('/'):'';
 const oldIds=i=>[...new Set([...i.historial.map(x=>x.telpo_id),...(i.cambios_id||[]).filter(c=>c.id_nuevo).map(c=>c.id_anterior)].filter(x=>x&&x!==i.telpo_id))];
-const flat=i=>({ids_ant:oldIds(i),tipo:i.serial[0].toUpperCase(),serial:i.serial,telpo_id:i.telpo_id,estado:i.estado,donde:i.actual.donde,asignado:i.actual.asignado,
+const flat=i=>({ids_ant:oldIds(i),lote:i.lote,serial:i.serial,telpo_id:i.telpo_id,estado:i.estado,donde:i.actual.donde,asignado:i.actual.asignado,
  coche:i.actual.coche,empresa:i.actual.empresa,instalacion:i.actual.instalacion,dias:i.actual.dias,retiro:i.actual.retiro,movimientos:i.movimientos,_i:i});
 const tag=e=>`<span class="tag" style="--c:${COLORS[e]}">${e}</span>`;
 
@@ -79,7 +80,7 @@ async function load(){
   try{
     const r=await fetch('/api/data');if(r.status===401){location.href='/login';return}const j=await r.json();
     if(j.error)throw new Error(j.error);
-    TEC=j.tecnicos||[];DATA=j.items.map(flat);fillTipos();buildDup();$('upd').textContent='Actualizado: '+j.actualizado;render();
+    TEC=j.tecnicos||[];DATA=j.items.map(flat);buildDup();$('upd').textContent='Actualizado: '+j.actualizado;render();
   }catch(e){$('upd').innerHTML='<span class="err">No se pudo cargar: '+esc(e.message)+'</span>'}
 }
 // Solo dígitos: coincide con el final del serial. Si no, busca en todos los campos.
@@ -101,18 +102,24 @@ function buildDup(){
 }
 const sharedIds=d=>[d.telpo_id,...d.ids_ant].filter(x=>x&&IDMAP[x]?.size>1);
 const dupTotal=()=>DATA.filter(d=>sharedIds(d).length).length;
+const LOTES=['B viejo','A viejo','A nuevo','Otros'];
+const LOTE_LABEL={'B viejo':'B viejo (2021)','A viejo':'A viejo','A nuevo':'A nuevo (2024)',Otros:'Otros'};
 function render(){
-  const cnt=k=>DATA.filter(d=>d.estado===k).length;
-  $('kpis').innerHTML=`<div class="kpi ${!estado?'on':''}" data-e="" style="--c:var(--ac)"><b>${DATA.length}</b>Total validadores</div>`+
+  const base=DATA.filter(d=>!lote||d.lote===lote);
+  const cnt=k=>base.filter(d=>d.estado===k).length;
+  $('tabs').innerHTML=[['','Todos',DATA.length],...LOTES.map(l=>[l,LOTE_LABEL[l],DATA.filter(d=>d.lote===l).length]).filter(t=>t[2])]
+    .map(([v,l,n])=>`<button class="tab ${lote===v?'on':''}" data-l="${esc(v)}">${l} <span class="mut">${n}</span></button>`).join('');
+  $('tabs').querySelectorAll('.tab').forEach(el=>el.onclick=()=>{lote=el.dataset.l;empresa='';render()});
+  $('kpis').innerHTML=`<div class="kpi ${!estado?'on':''}" data-e="" style="--c:var(--ac)"><b>${base.length}</b>Total validadores</div>`+
     Object.keys(COLORS).map(k=>`<div class="kpi ${estado===k?'on':''}" data-e="${k}" style="--c:${COLORS[k]}"><b>${cnt(k)}</b>${PL[k]}</div>`).join('');
   $('kpis').querySelectorAll('.kpi').forEach(el=>el.onclick=()=>{estado=el.dataset.e;$('est').value=estado;render()});
-  const emp={};DATA.filter(d=>d.estado==='Instalado').forEach(d=>emp[d.empresa||'(sin empresa)']=(emp[d.empresa||'(sin empresa)']||0)+1);
+  const emp={};base.filter(d=>d.estado==='Instalado').forEach(d=>emp[d.empresa||'(sin empresa)']=(emp[d.empresa||'(sin empresa)']||0)+1);
   const arr=Object.entries(emp).sort((a,b)=>b[1]-a[1]),mx=arr[0]?.[1]||1;
   $('bars').innerHTML=arr.map(([n,v])=>`<div data-n="${esc(n)}" class="${empresa===n?'on':''}"><span>${esc(n)}</span><i style="width:${v/mx*100}%"></i><span>${v}</span></div>`).join('')||'<span class="mut">Sin instalados</span>';
   $('bars').querySelectorAll('div').forEach(el=>el.onclick=()=>{empresa=empresa===el.dataset.n?'':el.dataset.n;render()});
   const q=$('q').value.trim().toLowerCase();
   let rows=DATA.filter(d=>(!estado||d.estado===estado)&&(!empresa||(d.empresa||'(sin empresa)')===empresa)&&
-    (!tipo||d.tipo===tipo)&&(!soloDup||sharedIds(d).length)&&matchQ(d,q));
+    (!lote||d.lote===lote)&&(!soloDup||sharedIds(d).length)&&matchQ(d,q));
   const [k,dir]=sort;
   const cur=r=>q&&r.telpo_id.toLowerCase().includes(q)?0:1;
   rows.sort((a,b)=>{if(cur(a)!==cur(b))return cur(a)-cur(b);const x=a[k]??'',y=b[k]??'';return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'es',{numeric:true}))*dir});
@@ -150,7 +157,7 @@ function newInstall(){
   const free=DATA.filter(d=>d.estado==='Disponible'||d.estado==='Con técnico').sort((a,b)=>a.serial.localeCompare(b.serial));
   const emps=[...new Set(DATA.map(d=>d.empresa).filter(Boolean))].sort();
   $('frm').innerHTML=`<h2 style="margin-top:0">Nueva instalación</h2><form class="f" id="ff">
-  <label>Tipo<select id="ftipo">${tipos().map(t=>`<option>${t}</option>`).join('')}</select></label>
+  <label>Grupo<select id="ftipo">${LOTES.filter(l=>free.some(d=>d.lote===l)).map(l=>`<option value="${l}">${LOTE_LABEL[l]}</option>`).join('')}</select></label>
   <label>Terminación del serial (ej. 465)<input id="fterm" inputmode="numeric" autocomplete="off"></label>
   <label><span id="fcount"></span><select name="serial" id="fser" required></select></label>
   <label>ID Telpo (se completa solo, puedes corregirlo)<input name="telpo_id" id="fid"></label>
@@ -161,7 +168,7 @@ function newInstall(){
   <div><button class="pri">Guardar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
   const fillId=()=>{$('fid').value=free.find(d=>d.serial===$('fser').value)?.telpo_id||''};
   const fillSer=()=>{const t=$('ftipo').value,e=$('fterm').value.trim();
-    const l=free.filter(d=>d.tipo===t&&(!e||d.serial.endsWith(e)));
+    const l=free.filter(d=>d.lote===t&&(!e||d.serial.endsWith(e)));
     $('fser').innerHTML=l.map(d=>`<option value="${esc(d.serial)}">${esc(d.serial)}${d.asignado?' — con '+esc(d.asignado):''}</option>`).join('');
     fillId();
     $('fcount').textContent=`Serial (${l.length} disponibles)`};
@@ -227,10 +234,7 @@ $('new').onclick=newInstall;
 $('out').onclick=async()=>{await post('/api/logout',{});location.href='/login'};
 fetch('/api/me').then(r=>r.json()).then(j=>$('me').textContent=j.usuario||'');
 $('est').innerHTML='<option value="">Todos los estados</option>'+Object.keys(COLORS).map(k=>`<option>${k}</option>`).join('');
-const tipos=()=>[...new Set(DATA.map(d=>d.tipo))].sort();
-function fillTipos(){$('tipo').innerHTML='<option value="">Todos los tipos</option>'+tipos().map(t=>`<option value="${t}"${t===tipo?' selected':''}>Tipo ${t}</option>`).join('')}
 $('dup').onclick=()=>{soloDup=!soloDup;render()};
-$('tipo').onchange=e=>{tipo=e.target.value;render()};
 $('est').onchange=e=>{estado=e.target.value;render()};
 $('q').oninput=render;$('reload').onclick=load;load();
 </script>

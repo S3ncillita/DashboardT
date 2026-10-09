@@ -15,6 +15,14 @@ const DAY = 86400000;
 const diffDays = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
 export const today = () => new Date().toISOString().slice(0, 10);
 
+// Grupo (lote) de un validador, según el prefijo de su serial.
+export function loteDe(serial) {
+  if (/^B(19|17)0530/.test(serial)) return 'B viejo';
+  if (/^A(13|17)0530/.test(serial)) return 'A viejo';
+  if (/^A290530/.test(serial)) return 'A nuevo';
+  return 'Otros';
+}
+
 // Agrupa las filas (ordenadas por id) por serial y calcula el estado actual.
 export function buildItems(rows) {
   const bySerial = new Map();
@@ -39,7 +47,7 @@ export function buildItems(rows) {
     else if (last.asignado) estado = 'Con técnico';
     else estado = 'Disponible';
     return {
-      serial, telpo_id, estado, actual: last, movimientos: h.length,
+      serial, lote: loteDe(serial), telpo_id, estado, actual: last, movimientos: h.length,
       dias_total: h.reduce((s, x) => s + (x.dias || 0), 0), historial: h,
     };
   });
