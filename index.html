@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Telpo</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--bd:#e3e6ea;--ac:#2563eb;
+--ok:#16a34a;--off:#6b7280;--free:#d97706;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--tx:#e8eaed;--mut:#9aa3af;--bd:#2a3039;--ac:#60a5fa;--ok:#4ade80;--off:#9ca3af;--free:#fbbf24;--bad:#f87171}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}.mut{color:var(--mut);font-size:12px}
+button,input,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:7px 10px}
+button{cursor:pointer}button:hover{border-color:var(--ac)}
+main{padding:0 16px 24px;max-width:1300px;margin:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px;cursor:pointer;border-left:4px solid var(--c)}
+.kpi.on{outline:2px solid var(--ac)}.kpi b{display:block;font-size:26px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px;margin-bottom:12px}
+.bars div{display:grid;grid-template-columns:130px 1fr 40px;gap:8px;align-items:center;margin:3px 0;cursor:pointer}
+.bars i{display:block;height:10px;background:var(--ac);border-radius:3px}
+.bars div.on span:first-child{font-weight:700}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.tools input{flex:1;min-width:200px}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{cursor:pointer;color:var(--mut);font-weight:600;position:sticky;top:0;background:var(--card)}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}
+.tag{padding:2px 8px;border-radius:99px;font-size:12px;color:#fff;background:var(--c)}
+dialog{border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);max-width:900px;width:92%}
+dialog::backdrop{background:#0008}
+.err{color:var(--bad);padding:12px}
+.warn{background:color-mix(in srgb,var(--free) 18%,transparent);border:1px solid var(--free);border-radius:6px;padding:8px 10px;margin:10px 0;display:grid;gap:6px}
+.cur{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mut)}
+form.f{display:grid;gap:10px;min-width:260px}form.f label{display:grid;gap:3px;font-size:12px;color:var(--mut)}
+button.pri{background:var(--ac);color:#fff;border:0}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Dashboard Telpo</h1><span class="mut" id="upd">Cargando…</span></div>
+  <div style="display:flex;gap:8px;align-items:center"><button id="new">+ Nueva instalación</button><button id="tecs">Técnicos</button><button id="reload">Actualizar</button><span class="mut" id="me"></span><button id="out">Salir</button></div>
+</header>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="panel"><b>Instalados por empresa</b> <span class="mut">(clic para filtrar)</span><div class="bars" id="bars"></div></div>
+  <div class="panel">
+    <div class="tools">
+      <input id="q" placeholder="Buscar: solo números = terminación del serial (ej. 465); o ID Telpo, coche, empresa…">
+      <select id="tipo"></select>
+      <button id="dup" type="button"></button>
+      <select id="est"></select>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody>
+    </table></div>
+    <div class="mut" id="count"></div>
+  </div>
+</main>
+<dialog id="dlg"></dialog>
+<dialog id="frm"></dialog>
+<script>
+const COLORS={Instalado:'var(--ok)',Disponible:'var(--free)','Con técnico':'#8b5cf6','En CAS':'#0ea5e9',Retirado:'var(--off)',Dañado:'var(--bad)'};
+const PL={Instalado:'Instalados',Disponible:'Disponibles','Con técnico':'Con técnico','En CAS':'En CAS',Retirado:'Retirados',Dañado:'Dañados'};
+const COLS=[['tipo','Tipo'],['telpo_id','ID Telpo'],['serial','Serial validador'],['estado','Estado'],['donde','Dónde está'],
+['asignado','Asignado a'],['coche','Coche'],['empresa','Empresa'],['instalacion','Instalación'],['dias','Días activos'],['retiro','Retiro'],['movimientos','Mov.']];
+let TEC=[],DATA=[],estado='',empresa='',tipo='',soloDup=false,IDMAP={},sort=['serial',1];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fd=s=>s?s.split('-').reverse().join('/'):'';
+const oldIds=i=>[...new Set([...i.historial.map(x=>x.telpo_id),...(i.cambios_id||[]).filter(c=>c.id_nuevo).map(c=>c.id_anterior)].filter(x=>x&&x!==i.telpo_id))];
+const flat=i=>({ids_ant:oldIds(i),tipo:i.serial[0].toUpperCase(),serial:i.serial,telpo_id:i.telpo_id,estado:i.estado,donde:i.actual.donde,asignado:i.actual.asignado,
+ coche:i.actual.coche,empresa:i.actual.empresa,instalacion:i.actual.instalacion,dias:i.actual.dias,retiro:i.actual.retiro,movimientos:i.movimientos,_i:i});
+const tag=e=>`<span class="tag" style="--c:${COLORS[e]}">${e}</span>`;
+
+async function load(){
+  $('upd').textContent='Cargando…';
+  try{
+    const r=await fetch('/api/data');if(r.status===401){location.href='/login';return}const j=await r.json();
+    if(j.error)throw new Error(j.error);
+    TEC=j.tecnicos||[];DATA=j.items.map(flat);fillTipos();buildDup();$('upd').textContent='Actualizado: '+j.actualizado;render();
+  }catch(e){$('upd').innerHTML='<span class="err">No se pudo cargar: '+esc(e.message)+'</span>'}
+}
+// Solo dígitos: coincide con el final del serial. Si no, busca en todos los campos.
+const matchQ=(d,q)=>{
+  if(!q)return true;
+  const ids=[d.telpo_id,...d.ids_ant].join(' ').toLowerCase();
+  if(/^\d+$/.test(q))return d.serial.endsWith(q)||(q.length>=8&&ids.includes(q)); // pocos dígitos = terminación del serial
+  return [d.serial,d.coche,d.empresa,d.asignado,d.donde].join(' ').toLowerCase().includes(q)||ids.includes(q);
+};
+// Si lo buscado coincide con un ID anterior (no el actual), se avisa en la celda.
+const idCell=(d,q)=>{
+  const hit=q&&d.ids_ant.find(x=>x.toLowerCase().includes(q))&&!d.telpo_id.toLowerCase().includes(q);
+  return esc(d.telpo_id)+(hit?` <span class="tag" style="--c:var(--free)" title="El ID buscado es anterior. El actual es ${esc(d.telpo_id)||'ninguno'}">ID anterior</span>`:'');
+};
+// ID -> seriales que lo tienen (actual o anterior). Más de uno = repetido.
+function buildDup(){
+  IDMAP={};
+  DATA.forEach(d=>[d.telpo_id,...d.ids_ant].filter(Boolean).forEach(x=>(IDMAP[x]??=new Set()).add(d.serial)));
+}
+const sharedIds=d=>[d.telpo_id,...d.ids_ant].filter(x=>x&&IDMAP[x]?.size>1);
+const dupTotal=()=>DATA.filter(d=>sharedIds(d).length).length;
+function render(){
+  const cnt=k=>DATA.filter(d=>d.estado===k).length;
+  $('kpis').innerHTML=`<div class="kpi ${!estado?'on':''}" data-e="" style="--c:var(--ac)"><b>${DATA.length}</b>Total validadores</div>`+
+    Object.keys(COLORS).map(k=>`<div class="kpi ${estado===k?'on':''}" data-e="${k}" style="--c:${COLORS[k]}"><b>${cnt(k)}</b>${PL[k]}</div>`).join('');
+  $('kpis').querySelectorAll('.kpi').forEach(el=>el.onclick=()=>{estado=el.dataset.e;$('est').value=estado;render()});
+  const emp={};DATA.filter(d=>d.estado==='Instalado').forEach(d=>emp[d.empresa||'(sin empresa)']=(emp[d.empresa||'(sin empresa)']||0)+1);
+  const arr=Object.entries(emp).sort((a,b)=>b[1]-a[1]),mx=arr[0]?.[1]||1;
+  $('bars').innerHTML=arr.map(([n,v])=>`<div data-n="${esc(n)}" class="${empresa===n?'on':''}"><span>${esc(n)}</span><i style="width:${v/mx*100}%"></i><span>${v}</span></div>`).join('')||'<span class="mut">Sin instalados</span>';
+  $('bars').querySelectorAll('div').forEach(el=>el.onclick=()=>{empresa=empresa===el.dataset.n?'':el.dataset.n;render()});
+  const q=$('q').value.trim().toLowerCase();
+  let rows=DATA.filter(d=>(!estado||d.estado===estado)&&(!empresa||(d.empresa||'(sin empresa)')===empresa)&&
+    (!tipo||d.tipo===tipo)&&(!soloDup||sharedIds(d).length)&&matchQ(d,q));
+  const [k,dir]=sort;
+  const cur=r=>q&&r.telpo_id.toLowerCase().includes(q)?0:1;
+  rows.sort((a,b)=>{if(cur(a)!==cur(b))return cur(a)-cur(b);const x=a[k]??'',y=b[k]??'';return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'es',{numeric:true}))*dir});
+  $('thead').innerHTML=COLS.map(([c,l])=>`<th data-c="${c}">${l}${sort[0]===c?(sort[1]>0?' ▲':' ▼'):''}</th>`).join('');
+  $('thead').querySelectorAll('th').forEach(el=>el.onclick=()=>{sort=[el.dataset.c,sort[0]===el.dataset.c?-sort[1]:1];render()});
+  $('tbody').innerHTML=rows.slice(0,500).map((d,n)=>`<tr data-n="${n}">`+COLS.map(([c])=>`<td>${c==='telpo_id'?idCell(d,q):c==='estado'?tag(d.estado):c==='instalacion'||c==='retiro'?fd(d[c]):esc(d[c])}</td>`).join('')+'</tr>').join('');
+  $('tbody').querySelectorAll('tr').forEach(el=>el.onclick=()=>detail(rows[el.dataset.n]));
+  $('dup').textContent=(soloDup?'✓ ':'')+`IDs compartidos (${dupTotal()})`;
+  $('count').textContent=`${rows.length} validadores`+(rows.length>500?' (mostrando 500, usa los filtros)':'');
+}
+function detail(d){
+  const all=d._i.historial,c=d._i.actual,inst=d.estado==='Instalado';
+  const h=all.filter(x=>x.empresa||x.coche||x.instalacion||x.donde||x.asignado); // sin las filas limpias
+  const f=(l,v)=>`<div><span class="mut">${l}</span><br><b>${esc(v)||'—'}</b></div>`;
+  $('dlg').innerHTML=`<h2 style="margin-top:0">${esc(d.serial)} ${tag(d.estado)}</h2>
+  <p class="mut">ID Telpo: ${esc(d.telpo_id)||'—'}</p>
+  <div class="cur">${f('Empresa',c.empresa)}${f('Coche',c.coche)}${f('Asignado a',c.asignado)}${f('Dónde está',c.donde)}
+  ${f('Instalación',fd(c.instalacion))}${f('Retiro',fd(c.retiro))}${f('Días activos',c.dias??'')}</div>
+  ${sharedIds(d).length?`<div class="warn"><b>ID compartido con otro serial</b> <span class="mut">(normal si el Telpo recién se bajó; quítalo cuando ya tenga ID nuevo)</span>${[...new Set(sharedIds(d))].map(x=>`<div>${esc(x)} también está en: ${[...IDMAP[x]].filter(sr=>sr!==d.serial).map(sr=>'…'+esc(sr.slice(-6))).join(', ')} <button onclick="quitarId('${esc(d.serial)}','${esc(x)}')">Quitar de este serial</button></div>`).join('')}</div>`:''}
+  ${d._i.cambios_id?.length?`<p class="mut">IDs anteriores: ${d._i.cambios_id.map(c=>`<b>${esc(c.id_anterior)}</b> (${c.id_nuevo?'cambiado':'quitado'} el ${esc(c.fecha.slice(0,10).split('-').reverse().join('/'))} por ${esc(c.usuario)})`).join(' · ')}</p>`:''}
+  <p>${inst?`<button class="pri" onclick="retire('${esc(d.serial)}')">Retirar</button> `:['Disponible','Con técnico','En CAS','Retirado'].includes(d.estado)?`<button class="pri" onclick="mover('${esc(d.serial)}','${esc(d.estado)}','${esc(c.asignado)}')">Mover / asignar</button> `:''}<button onclick="editId('${esc(d.serial)}','${esc(d.telpo_id)}')">Editar ID Telpo</button> <button onclick="dlg.close()">Cerrar</button></p>
+  <details open><summary>Recorrido (${h.length} movimientos · ${d._i.dias_total} días activos en total)</summary>
+  <div class="wrap"><table><thead><tr><th>ID Telpo</th><th>Empresa</th><th>Coche</th><th>Asignado a</th><th>Dónde está</th><th>Instalación</th><th>Retiro</th><th>Días</th></tr></thead><tbody>`+
+  h.map(x=>`<tr><td>${esc(x.telpo_id)}</td><td>${esc(x.empresa)}</td><td>${esc(x.coche)}</td><td>${esc(x.asignado)}</td><td>${esc(x.donde)}</td><td>${fd(x.instalacion)}</td><td>${fd(x.retiro)}</td><td>${x.dias??''}</td></tr>`).join('')+
+  `</tbody></table></div></details>`;
+  $('dlg').showModal();
+}
+async function post(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.status===401){location.href='/login';return}
+  const j=await r.json();if(!r.ok)throw new Error(j.error);return j;
+}
+const todayStr=()=>new Date().toLocaleDateString('en-CA');
+function newInstall(){
+  const free=DATA.filter(d=>d.estado==='Disponible'||d.estado==='Con técnico').sort((a,b)=>a.serial.localeCompare(b.serial));
+  const emps=[...new Set(DATA.map(d=>d.empresa).filter(Boolean))].sort();
+  $('frm').innerHTML=`<h2 style="margin-top:0">Nueva instalación</h2><form class="f" id="ff">
+  <label>Tipo<select id="ftipo">${tipos().map(t=>`<option>${t}</option>`).join('')}</select></label>
+  <label>Terminación del serial (ej. 465)<input id="fterm" inputmode="numeric" autocomplete="off"></label>
+  <label><span id="fcount"></span><select name="serial" id="fser" required></select></label>
+  <label>ID Telpo (se completa solo, puedes corregirlo)<input name="telpo_id" id="fid"></label>
+  <label>Empresa<input name="empresa" list="emps" required><datalist id="emps">${emps.map(e=>`<option value="${esc(e)}">`).join('')}</datalist></label>
+  <label>Coche<input name="coche" required></label>
+  <label>Fecha de instalación<input type="date" name="fecha" value="${todayStr()}" required></label>
+  <div class="err" id="fe"></div>
+  <div><button class="pri">Guardar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
+  const fillId=()=>{$('fid').value=free.find(d=>d.serial===$('fser').value)?.telpo_id||''};
+  const fillSer=()=>{const t=$('ftipo').value,e=$('fterm').value.trim();
+    const l=free.filter(d=>d.tipo===t&&(!e||d.serial.endsWith(e)));
+    $('fser').innerHTML=l.map(d=>`<option value="${esc(d.serial)}">${esc(d.serial)}${d.asignado?' — con '+esc(d.asignado):''}</option>`).join('');
+    fillId();
+    $('fcount').textContent=`Serial (${l.length} disponibles)`};
+  $('ftipo').onchange=$('fterm').oninput=fillSer;$('fser').onchange=fillId;fillSer();
+  $('ff').onsubmit=async ev=>{ev.preventDefault();
+    try{await post('/api/install',Object.fromEntries(new FormData(ev.target)));frm.close();load()}
+    catch(e){$('fe').textContent=e.message}};
+  $('frm').showModal();
+}
+function retire(serial){
+  $('frm').innerHTML=`<h2 style="margin-top:0">Retirar ${esc(serial)}</h2><form class="f" id="ff">
+  <label>Fecha de retiro<input type="date" name="fecha" value="${todayStr()}" required></label>
+  <label>Retirado por (técnico, opcional: queda con su nombre)<select name="tecnico"><option value="">— ninguno —</option>${TEC.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label>
+  <div class="err" id="fe"></div>
+  <div><button class="pri">Retirar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
+  $('ff').onsubmit=async ev=>{ev.preventDefault();
+    try{await post('/api/retire',{serial,...Object.fromEntries(new FormData(ev.target))});frm.close();dlg.close();load()}
+    catch(e){$('fe').textContent=e.message}};
+  $('frm').showModal();
+}
+function mover(serial,estado,tec){
+  const cur=estado==='En CAS'?'cas':estado==='Con técnico'?'tecnico':'disponible';
+  $('frm').innerHTML=`<h2 style="margin-top:0">Mover ${esc(serial)}</h2><form class="f" id="ff">
+  <label>¿Dónde está ahora?<select name="destino" id="fd">
+    <option value="tecnico"${cur==='tecnico'?' selected':''}>Con un técnico</option>
+    <option value="cas"${cur==='cas'?' selected':''}>En CAS (reparación)</option>
+    <option value="disponible"${cur==='disponible'?' selected':''}>Disponible (sin asignar)</option></select></label>
+  <label id="ft">Técnico<select name="tecnico">${[...new Set([...(tec?[tec]:[]),...TEC])].sort().map(t=>`<option${t===tec?' selected':''}>${esc(t)}${TEC.includes(t)?'':' (no está en la lista)'}</option>`).join('')}</select></label>${TEC.length?'':'<p class="err">Primero agrega técnicos con el botón «Técnicos».</p>'}
+  <div class="err" id="fe"></div>
+  <div><button class="pri">Guardar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
+  const sync=()=>{$('ft').style.display=$('fd').value==='tecnico'?'':'none'};
+  $('fd').onchange=sync;sync();
+  $('ff').onsubmit=async ev=>{ev.preventDefault();
+    try{await post('/api/mover',{serial,...Object.fromEntries(new FormData(ev.target))});frm.close();dlg.close();load()}
+    catch(e){$('fe').textContent=e.message}};
+  $('frm').showModal();
+}
+async function editId(serial,actual){
+  const v=prompt('Nuevo ID Telpo para '+serial+':',actual);
+  if(v===null||!v.trim()||v.trim()===actual)return;
+  try{await post('/api/telpo-id',{serial,telpo_id:v.trim()});dlg.close();load()}catch(e){alert(e.message)}
+}
+async function quitarId(serial,id){
+  if(!confirm('¿Quitar el ID '+id+' del serial '+serial+'?\nSe borra de este serial y queda registrado. Los demás seriales no cambian.'))return;
+  try{await post('/api/telpo-id/quitar',{serial,telpo_id:id});dlg.close();load()}catch(e){alert(e.message)}
+}
+function tecnicos(){
+  const cuenta=n=>DATA.filter(d=>d.estado==='Con técnico'&&d.asignado===n).length;
+  $('frm').innerHTML=`<h2 style="margin-top:0">Técnicos</h2>
+  <div class="wrap"><table><tbody>${TEC.map(t=>`<tr><td>${esc(t)}</td><td class="mut">${cuenta(t)} validadores</td><td><button onclick="bajaTec('${esc(t)}')">Quitar</button></td></tr>`).join('')||'<tr><td class="mut">Todavía no hay técnicos</td></tr>'}</tbody></table></div>
+  <form class="f" id="ff" style="margin-top:12px"><label>Nuevo técnico<input name="nombre" required autocomplete="off"></label>
+  <div class="err" id="fe"></div><div><button class="pri">Agregar</button> <button type="button" onclick="frm.close()">Cerrar</button></div></form>`;
+  $('ff').onsubmit=async ev=>{ev.preventDefault();
+    try{await post('/api/tecnicos',Object.fromEntries(new FormData(ev.target)));await load();tecnicos()}catch(e){$('fe').textContent=e.message}};
+  $('frm').showModal();
+}
+async function bajaTec(n){
+  if(!confirm('¿Quitar a '+n+' de la lista?\nLos validadores que ya tiene siguen con su nombre.'))return;
+  await post('/api/tecnicos/baja',{nombre:n});await load();tecnicos();
+}
+$('tecs').onclick=tecnicos;
+$('new').onclick=newInstall;
+$('out').onclick=async()=>{await post('/api/logout',{});location.href='/login'};
+fetch('/api/me').then(r=>r.json()).then(j=>$('me').textContent=j.usuario||'');
+$('est').innerHTML='<option value="">Todos los estados</option>'+Object.keys(COLORS).map(k=>`<option>${k}</option>`).join('');
+const tipos=()=>[...new Set(DATA.map(d=>d.tipo))].sort();
+function fillTipos(){$('tipo').innerHTML='<option value="">Todos los tipos</option>'+tipos().map(t=>`<option value="${t}"${t===tipo?' selected':''}>Tipo ${t}</option>`).join('')}
+$('dup').onclick=()=>{soloDup=!soloDup;render()};
+$('tipo').onchange=e=>{tipo=e.target.value;render()};
+$('est').onchange=e=>{estado=e.target.value;render()};
+$('q').oninput=render;$('reload').onclick=load;load();
+</script>
+</body>
+</html>
