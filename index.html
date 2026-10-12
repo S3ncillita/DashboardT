@@ -28,7 +28,12 @@ th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--bd);white-sp
 th{cursor:pointer;color:var(--mut);font-weight:600;position:sticky;top:0;background:var(--card)}
 tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}
 .tag{padding:2px 8px;border-radius:99px;font-size:12px;color:#fff;background:var(--c)}
-dialog{border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);max-width:900px;width:92%}
+dialog{border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);width:min(1200px,96vw);max-height:92vh;overflow:auto;padding:22px}
+#frm{width:min(520px,94vw)}
+.xbtn{position:absolute;top:10px;right:10px;width:34px;height:34px;padding:0;border:0;border-radius:8px;background:#dc2626;color:#fff;font-size:18px;line-height:1;cursor:pointer}
+.xbtn:hover{background:#b91c1c}
+.hist{max-height:55vh;overflow:auto;border:1px solid var(--bd);border-radius:6px;margin-top:8px}.hist table{font-size:15px;min-width:1000px}.hist th{position:sticky;top:0;background:var(--card);z-index:1}
+dialog h2{padding-right:46px}
 dialog::backdrop{background:#0008}
 .err{color:var(--bad);padding:12px}
 .warn{background:color-mix(in srgb,var(--free) 18%,transparent);border:1px solid var(--free);border-radius:6px;padding:8px 10px;margin:10px 0;display:grid;gap:6px}
@@ -134,16 +139,16 @@ function detail(d){
   const all=d._i.historial,c=d._i.actual,inst=d.estado==='Instalado';
   const h=all.filter(x=>x.empresa||x.coche||x.instalacion||x.donde||x.asignado); // sin las filas limpias
   const f=(l,v)=>`<div><span class="mut">${l}</span><br><b>${esc(v)||'—'}</b></div>`;
-  $('dlg').innerHTML=`<h2 style="margin-top:0">${esc(d.serial)} ${tag(d.estado)}</h2>
+  $('dlg').innerHTML=`<button class="xbtn" title="Cerrar" onclick="dlg.close()">✕</button><h2 style="margin-top:0">${esc(d.serial)} ${tag(d.estado)}</h2>
   <p class="mut">ID Telpo: ${esc(d.telpo_id)||'—'}</p>
   <div class="cur">${f('Empresa',c.empresa)}${f('Coche',c.coche)}${f('Asignado a',c.asignado)}${f('Dónde está',c.donde)}
-  ${f('Instalación',fd(c.instalacion))}${f('Retiro',fd(c.retiro))}${f('Días activos',c.dias??'')}${d.estado==='Enviado a Telpo'?f('Enviado el',fd(c.envio))+f('Observación',c.obs):''}</div>
+  ${f('Instalación',fd(c.instalacion))}${f('Retiro',fd(c.retiro))}${f('Días activos',c.dias??'')}${d.estado==='Enviado a Telpo'?f('Enviado el',fd(c.envio)):''}${c.obs?f('Observación',c.obs):''}</div>
   ${sharedIds(d).length?`<div class="warn"><b>ID compartido con otro serial</b> <span class="mut">(normal si el Telpo recién se bajó; quítalo cuando ya tenga ID nuevo)</span>${[...new Set(sharedIds(d))].map(x=>`<div>${esc(x)} también está en: ${[...IDMAP[x]].filter(sr=>sr!==d.serial).map(sr=>'…'+esc(sr.slice(-6))).join(', ')} <button onclick="quitarId('${esc(d.serial)}','${esc(x)}')">Quitar de este serial</button></div>`).join('')}</div>`:''}
   ${d._i.cambios_id?.length?`<p class="mut">IDs anteriores: ${d._i.cambios_id.map(c=>`<b>${esc(c.id_anterior)}</b> (${c.id_nuevo?'cambiado':'quitado'} el ${esc(c.fecha.slice(0,10).split('-').reverse().join('/'))} por ${esc(c.usuario)})`).join(' · ')}</p>`:''}
-  <p>${inst?`<button class="pri" onclick="retire('${esc(d.serial)}')">Retirar</button> `:['Disponible','Con técnico','En CAS','Enviado a Telpo','Retirado','Dañado'].includes(d.estado)?`<button class="pri" onclick="mover('${esc(d.serial)}','${esc(d.estado)}','${esc(c.asignado)}')">Mover / asignar</button> `:''}<button onclick="editId('${esc(d.serial)}','${esc(d.telpo_id)}')">Editar ID Telpo</button> <button onclick="dlg.close()">Cerrar</button></p>
+  <p>${inst?`<button class="pri" onclick="retire('${esc(d.serial)}')">Retirar</button> `:['Disponible','Con técnico','En CAS','Enviado a Telpo','Retirado','Dañado'].includes(d.estado)?`<button class="pri" onclick="mover('${esc(d.serial)}','${esc(d.estado)}','${esc(c.asignado)}')">Mover / asignar</button> `:''}<button onclick="editId('${esc(d.serial)}','${esc(d.telpo_id)}')">Editar ID Telpo</button> </p>
   <details open><summary>Recorrido (${h.length} movimientos · ${d._i.dias_total} días activos en total)</summary>
-  <div class="wrap"><table><thead><tr><th>ID Telpo</th><th>Empresa</th><th>Coche</th><th>Asignado a</th><th>Dónde está</th><th>Instalación</th><th>Retiro</th><th>Días</th><th>Envío a Telpo</th></tr></thead><tbody>`+
-  h.map(x=>`<tr><td>${esc(x.telpo_id)}</td><td>${esc(x.empresa)}</td><td>${esc(x.coche)}</td><td>${esc(x.asignado)}</td><td>${esc(x.donde)}</td><td>${fd(x.instalacion)}</td><td>${fd(x.retiro)}</td><td>${x.dias??''}</td><td>${x.donde.toUpperCase()==='TELPO'?esc((x.envio?'Enviado '+fd(x.envio):'Enviado')+(x.devolucion?' · devuelto '+fd(x.devolucion):'')+(x.obs?' · '+x.obs:'')):''}</td></tr>`).join('')+
+  <div class="hist"><table><thead><tr><th>ID Telpo</th><th>Empresa</th><th>Coche</th><th>Asignado a</th><th>Dónde está</th><th>Instalación</th><th>Retiro</th><th>Días</th><th>Envío a Telpo</th><th>Observación</th></tr></thead><tbody>`+
+  h.map(x=>`<tr><td>${esc(x.telpo_id)}</td><td>${esc(x.empresa)}</td><td>${esc(x.coche)}</td><td>${esc(x.asignado)}</td><td>${esc(x.donde)}</td><td>${fd(x.instalacion)}</td><td>${fd(x.retiro)}</td><td>${x.dias??''}</td><td>${x.donde.toUpperCase()==='TELPO'?esc((x.envio?'Enviado '+fd(x.envio):'Enviado')+(x.devolucion?' · devuelto '+fd(x.devolucion):'')):''}</td><td>${esc(x.obs)}</td></tr>`).join('')+
   `</tbody></table></div></details>`;
   $('dlg').showModal();
 }
@@ -181,6 +186,7 @@ function newInstall(){
 function retire(serial){
   $('frm').innerHTML=`<h2 style="margin-top:0">Retirar ${esc(serial)}</h2><form class="f" id="ff">
   <label>Fecha de retiro<input type="date" name="fecha" value="${todayStr()}" required></label>
+  <label>Observación del retiro (opcional: motivo, falla, etc.)<input name="observacion" maxlength="200" autocomplete="off"></label>
   <label>Retirado por (técnico, opcional: queda con su nombre)<select name="tecnico"><option value="">— ninguno —</option>${TEC.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label>
   <div class="err" id="fe"></div>
   <div><button class="pri">Retirar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;

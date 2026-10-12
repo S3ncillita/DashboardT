@@ -189,7 +189,9 @@ app.post('/api/retire', wrap(async (req, res) => {
     if (fecha < last.fecha_instalacion) throw fail(400, 'El retiro no puede ser antes de la instalación');
     const tecnico = nombreTec(req.body.tecnico);
     await assertTecnico(conn, tecnico);
-    await conn.query('UPDATE movimientos SET fecha_retiro = ? WHERE id = ?', [fecha, last.id]);
+    const obs = str(req.body.observacion).slice(0, 200);
+    await conn.query('UPDATE movimientos SET fecha_retiro = ?, observacion = IF(? = \'\', observacion, ?) WHERE id = ?',
+      [fecha, obs, obs, last.id]);
     await conn.query('INSERT INTO movimientos (serial, telpo_id, asignado) VALUES (?, ?, ?)',
       [serial, last.telpo_id, tecnico]);
     await conn.commit();
