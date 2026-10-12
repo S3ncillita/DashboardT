@@ -1,5 +1,5 @@
 // Marca como "Enviado a Telpo" los seriales de la pestaña PARA TELPO de la planilla (.xlsx).
-// Agrega una fila nueva al final de cada serial (el recorrido anterior queda intacto).
+// Agrega una fila nueva al final de cada serial (el recorrido anterior queda intacto), asignada a WPOS.
 // Se saltan: los que ya figuran enviados, los que están instalados (hay que retirarlos primero)
 // y los que no existen en MySQL.
 // Uso: node import-envios.js <archivo.xlsx> ["PARA TELPO"] [--dry]
@@ -52,12 +52,13 @@ console.log(`  fecha de envío: la planilla no la trae, quedan sin fecha`);
 if (dry || !aImportar.length) {
   console.log(dry ? '(--dry: no se escribió nada)' : 'Nada que importar.');
 } else {
-  const filas = aImportar.map((x) => [x.serial, tid.get(x.serial) ?? '', 'TELPO',
+  // En la planilla esos validadores figuran asignados a WPOS, que es quien los lleva a Telpo.
+  const filas = aImportar.map((x) => [x.serial, tid.get(x.serial) ?? '', 'WPOS', 'TELPO',
     [`Enviado a Telpo (planilla PARA TELPO${x.marca ? `, marca "${x.marca}"` : ''})`, x.obs].filter(Boolean).join(' · ').slice(0, 200)]);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.query('INSERT INTO movimientos (serial, telpo_id, donde, observacion) VALUES ?', [filas]);
+    await conn.query('INSERT INTO movimientos (serial, telpo_id, asignado, donde, observacion) VALUES ?', [filas]);
     await conn.commit();
     console.log('Importado.');
   } catch (e) {
