@@ -196,7 +196,7 @@ function mover(serial,estado,tec){
     <option value="tecnico"${cur==='tecnico'?' selected':''}>Con un técnico</option>
     <option value="cas"${cur==='cas'?' selected':''}>En CAS (reparación)</option>
     <option value="disponible"${cur==='disponible'?' selected':''}>Disponible (sin asignar)</option></select></label>
-  <label id="ft">Técnico<select name="tecnico">${[...new Set([...(tec?[tec]:[]),...TEC])].sort().map(t=>`<option${t===tec?' selected':''}>${esc(t)}${TEC.includes(t)?'':' (no está en la lista)'}</option>`).join('')}</select></label>${TEC.length?'':'<p class="err">Primero agrega técnicos con el botón «Técnicos».</p>'}
+  <div id="ft"><label>Técnico<select name="tecnico">${[...new Set([...(tec?[tec]:[]),...TEC])].sort().map(t=>`<option value="${esc(t)}"${t===tec?' selected':''}>${esc(t)}${TEC.includes(t)?'':' (no está en la lista)'}</option>`).join('')}</select></label>${TEC.length||tec?'':'<p class="err">No hay técnicos cargados. Cierra esto y agrégalos con el botón «Técnicos».</p>'}</div>
   <div class="err" id="fe"></div>
   <div><button class="pri">Guardar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
   const sync=()=>{$('ft').style.display=$('fd').value==='tecnico'?'':'none'};
