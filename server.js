@@ -141,7 +141,7 @@ app.post('/api/tecnicos/baja', wrap(async (req, res) => {
 app.post('/api/mover', wrap(async (req, res) => {
   const serial = str(req.body.serial), destino = str(req.body.destino), tecnico = nombreTec(req.body.tecnico);
   const fecha = str(req.body.fecha) || today();
-  const obs = str(req.body.observacion).slice(0, 200);
+  const obs = str(req.body.observacion).slice(0, 1000);
   const vals = { tecnico: [tecnico, ''], cas: ['', 'CAS'], telpo: ['', 'TELPO'], disponible: ['', ''] }[destino];
   if (!vals) throw fail(400, 'Destino inválido');
   if (destino === 'tecnico' && !tecnico) throw fail(400, 'Falta el nombre del técnico');
@@ -189,7 +189,7 @@ app.post('/api/retire', wrap(async (req, res) => {
     if (fecha < last.fecha_instalacion) throw fail(400, 'El retiro no puede ser antes de la instalación');
     const tecnico = nombreTec(req.body.tecnico);
     await assertTecnico(conn, tecnico);
-    const obs = str(req.body.observacion).slice(0, 200);
+    const obs = str(req.body.observacion).slice(0, 1000);
     await conn.query('UPDATE movimientos SET fecha_retiro = ?, observacion = IF(? = \'\', observacion, ?) WHERE id = ?',
       [fecha, obs, obs, last.id]);
     await conn.query('INSERT INTO movimientos (serial, telpo_id, asignado) VALUES (?, ?, ?)',

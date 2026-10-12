@@ -16,5 +16,13 @@ for (const [col, ddl] of Object.entries(nuevas)) {
     [DB_NAME, 'movimientos', col]);
   if (!ex.n) { await conn.query(`ALTER TABLE movimientos ADD COLUMN ${col} ${ddl}`); console.log(`Columna agregada: ${col}`); }
 }
+// La observación empezó en 200 letras; ahora admite un texto largo (varios motivos).
+const [[obs]] = await conn.query(
+  "SELECT CHARACTER_MAXIMUM_LENGTH n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'movimientos' AND COLUMN_NAME = 'observacion'",
+  [DB_NAME]);
+if (obs && obs.n < 1000) {
+  await conn.query("ALTER TABLE movimientos MODIFY observacion VARCHAR(1000) NOT NULL DEFAULT ''");
+  console.log('Columna observacion ampliada a 1000 caracteres');
+}
 console.log(`Base "${DB_NAME}" lista.`);
 await conn.end();

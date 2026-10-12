@@ -54,7 +54,7 @@ if (dry || !aImportar.length) {
 } else {
   // En la planilla esos validadores figuran asignados a WPOS, que es quien los lleva a Telpo.
   const filas = aImportar.map((x) => [x.serial, tid.get(x.serial) ?? '', 'WPOS', 'TELPO',
-    [`Enviado a Telpo (planilla PARA TELPO${x.marca ? `, marca "${x.marca}"` : ''})`, x.obs].filter(Boolean).join(' · ').slice(0, 200)]);
+    [`Enviado a Telpo (planilla PARA TELPO${x.marca ? `, marca "${x.marca}"` : ''})`, x.obs].filter(Boolean).join(' · ').slice(0, 1000)]);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

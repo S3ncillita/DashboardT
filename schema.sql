@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS movimientos (
   fecha_retiro DATE NULL,
   fecha_envio DATE NULL,
   fecha_devolucion DATE NULL,
-  observacion VARCHAR(200) NOT NULL DEFAULT '',
+  observacion VARCHAR(1000) NOT NULL DEFAULT '',
   creado TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_serial (serial),
   INDEX idx_empresa (empresa)
