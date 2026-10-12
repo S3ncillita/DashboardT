@@ -24,6 +24,17 @@ Dashboard en `http://IP_DE_LA_NUC:8000`. Logs: `pm2 logs telpo-dashboard`.
    así que se puede correr más de una vez sin duplicar.
 
 ---
+## Cargar los "Enviados a Telpo" de la planilla (pestaña PARA TELPO)
+Después de cargar las pestañas de validadores (y de actualizar B viejo, si se hace):
+
+    node import-envios.js datos\planilla.xlsx --dry
+    node import-envios.js datos\planilla.xlsx
+
+Marca esos seriales como "Enviado a Telpo" (sin fecha, porque la planilla no la trae). Se puede repetir
+sin duplicar, y se salta los que están instalados: hay que retirarlos antes. Si más adelante se vuelve a
+cargar la pestaña B VIEJO con `--replace`, hay que correr este comando otra vez.
+
+---
 ## Instalación manual (alternativa)
 
 ## Forma rápida

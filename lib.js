@@ -32,6 +32,7 @@ export function buildItems(rows) {
     const mov = {
       telpo_id: r.telpo_id, donde: r.donde, asignado: r.asignado, coche: r.coche, empresa: r.empresa,
       instalacion: r.fecha_instalacion || '', retiro: r.fecha_retiro || '',
+      envio: r.fecha_envio || '', devolucion: r.fecha_devolucion || '', obs: r.observacion || '',
       dias: r.fecha_instalacion && end && end >= r.fecha_instalacion ? diffDays(r.fecha_instalacion, end) : null,
     };
     if (!bySerial.has(r.serial)) bySerial.set(r.serial, []);
@@ -45,6 +46,7 @@ export function buildItems(rows) {
     else if (last.instalacion && !last.retiro) estado = 'Instalado';
     else if (last.retiro) estado = 'Retirado';
     else if (last.donde.toUpperCase() === 'CAS') estado = 'En CAS';
+    else if (last.donde.toUpperCase() === 'TELPO') estado = 'Enviado a Telpo';
     else if (last.asignado) estado = 'Con técnico';
     else estado = 'Disponible';
     return {

@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS movimientos (
   empresa VARCHAR(80) NOT NULL DEFAULT '',
   fecha_instalacion DATE NULL,
   fecha_retiro DATE NULL,
+  fecha_envio DATE NULL,
+  fecha_devolucion DATE NULL,
+  observacion VARCHAR(200) NOT NULL DEFAULT '',
   creado TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_serial (serial),
   INDEX idx_empresa (empresa)

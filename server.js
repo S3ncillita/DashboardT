@@ -136,12 +136,16 @@ app.post('/api/tecnicos/baja', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Mover un validador que no está instalado: con un técnico, en CAS o disponible.
+// Mover un validador que no está instalado: con un técnico, en CAS, enviado a Telpo o disponible.
+// Cuando sale de "Enviado a Telpo" se anota la fecha de devolución y el nuevo estado va en una fila nueva.
 app.post('/api/mover', wrap(async (req, res) => {
   const serial = str(req.body.serial), destino = str(req.body.destino), tecnico = nombreTec(req.body.tecnico);
-  const vals = { tecnico: [tecnico, ''], cas: ['', 'CAS'], disponible: ['', ''] }[destino];
+  const fecha = str(req.body.fecha) || today();
+  const obs = str(req.body.observacion).slice(0, 200);
+  const vals = { tecnico: [tecnico, ''], cas: ['', 'CAS'], telpo: ['', 'TELPO'], disponible: ['', ''] }[destino];
   if (!vals) throw fail(400, 'Destino inválido');
   if (destino === 'tecnico' && !tecnico) throw fail(400, 'Falta el nombre del técnico');
+  if (!isDate(fecha)) throw fail(400, 'Fecha inválida');
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -149,13 +153,21 @@ app.post('/api/mover', wrap(async (req, res) => {
       'SELECT * FROM movimientos WHERE serial = ? ORDER BY id DESC LIMIT 1 FOR UPDATE', [serial]);
     if (!last) throw fail(404, 'Serial no encontrado');
     if (destino === 'tecnico') await assertTecnico(conn, tecnico, last.asignado);
+    const enTelpo = last.donde.toUpperCase() === 'TELPO';
+    const danado = BAD_PLACES.has(last.donde.toUpperCase());
     if (last.fecha_instalacion && !last.fecha_retiro) throw fail(409, 'Está instalado: primero hay que retirarlo');
-    if (BAD_PLACES.has(last.donde.toUpperCase())) throw fail(409, 'Está marcado como dañado');
-    if (last.fecha_instalacion) { // la última fila es un retiro: se agrega una fila nueva debajo
-      await conn.query('INSERT INTO movimientos (serial, telpo_id, asignado, donde) VALUES (?, ?, ?, ?)',
-        [serial, last.telpo_id, vals[0], vals[1]]);
+    if (enTelpo && destino === 'telpo') throw fail(409, 'Ya está enviado a Telpo');
+    if (danado && destino !== 'telpo') throw fail(409, 'Está marcado como dañado');
+    if (enTelpo) await conn.query('UPDATE movimientos SET fecha_devolucion = ? WHERE id = ?', [fecha, last.id]);
+    const envio = destino === 'telpo' ? [fecha, obs] : [null, ''];
+    if (last.fecha_instalacion || enTelpo || danado) { // la fila anterior queda como historial
+      await conn.query(
+        'INSERT INTO movimientos (serial, telpo_id, asignado, donde, fecha_envio, observacion) VALUES (?, ?, ?, ?, ?, ?)',
+        [serial, last.telpo_id, vals[0], vals[1], envio[0], envio[1]]);
     } else {
-      await conn.query('UPDATE movimientos SET asignado = ?, donde = ? WHERE id = ?', [vals[0], vals[1], last.id]);
+      await conn.query(
+        'UPDATE movimientos SET asignado = ?, donde = ?, fecha_envio = ?, observacion = ? WHERE id = ?',
+        [vals[0], vals[1], envio[0], envio[1], last.id]);
     }
     await conn.commit();
     res.json({ ok: true });

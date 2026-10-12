@@ -62,8 +62,8 @@ button.pri{background:var(--ac);color:#fff;border:0}
 <dialog id="dlg"></dialog>
 <dialog id="frm"></dialog>
 <script>
-const COLORS={Instalado:'var(--ok)',Disponible:'var(--free)','Con técnico':'#8b5cf6','En CAS':'#0ea5e9',Retirado:'var(--off)',Dañado:'var(--bad)'};
-const PL={Instalado:'Instalados',Disponible:'Disponibles','Con técnico':'Con técnico','En CAS':'En CAS',Retirado:'Retirados',Dañado:'Dañados'};
+const COLORS={Instalado:'var(--ok)',Disponible:'var(--free)','Con técnico':'#8b5cf6','En CAS':'#0ea5e9','Enviado a Telpo':'#f97316',Retirado:'var(--off)',Dañado:'var(--bad)'};
+const PL={Instalado:'Instalados',Disponible:'Disponibles','Con técnico':'Con técnico','En CAS':'En CAS','Enviado a Telpo':'Enviados a Telpo',Retirado:'Retirados',Dañado:'Dañados'};
 const COLS=[['lote','Lote'],['telpo_id','ID Telpo'],['serial','Serial validador'],['estado','Estado'],['donde','Dónde está'],
 ['asignado','Asignado a'],['coche','Coche'],['empresa','Empresa'],['instalacion','Instalación'],['dias','Días activos'],['retiro','Retiro'],['movimientos','Mov.']];
 let TEC=[],DATA=[],estado='',empresa='',lote='',soloDup=false,IDMAP={},sort=['serial',1];
@@ -137,13 +137,13 @@ function detail(d){
   $('dlg').innerHTML=`<h2 style="margin-top:0">${esc(d.serial)} ${tag(d.estado)}</h2>
   <p class="mut">ID Telpo: ${esc(d.telpo_id)||'—'}</p>
   <div class="cur">${f('Empresa',c.empresa)}${f('Coche',c.coche)}${f('Asignado a',c.asignado)}${f('Dónde está',c.donde)}
-  ${f('Instalación',fd(c.instalacion))}${f('Retiro',fd(c.retiro))}${f('Días activos',c.dias??'')}</div>
+  ${f('Instalación',fd(c.instalacion))}${f('Retiro',fd(c.retiro))}${f('Días activos',c.dias??'')}${d.estado==='Enviado a Telpo'?f('Enviado el',fd(c.envio))+f('Observación',c.obs):''}</div>
   ${sharedIds(d).length?`<div class="warn"><b>ID compartido con otro serial</b> <span class="mut">(normal si el Telpo recién se bajó; quítalo cuando ya tenga ID nuevo)</span>${[...new Set(sharedIds(d))].map(x=>`<div>${esc(x)} también está en: ${[...IDMAP[x]].filter(sr=>sr!==d.serial).map(sr=>'…'+esc(sr.slice(-6))).join(', ')} <button onclick="quitarId('${esc(d.serial)}','${esc(x)}')">Quitar de este serial</button></div>`).join('')}</div>`:''}
   ${d._i.cambios_id?.length?`<p class="mut">IDs anteriores: ${d._i.cambios_id.map(c=>`<b>${esc(c.id_anterior)}</b> (${c.id_nuevo?'cambiado':'quitado'} el ${esc(c.fecha.slice(0,10).split('-').reverse().join('/'))} por ${esc(c.usuario)})`).join(' · ')}</p>`:''}
-  <p>${inst?`<button class="pri" onclick="retire('${esc(d.serial)}')">Retirar</button> `:['Disponible','Con técnico','En CAS','Retirado'].includes(d.estado)?`<button class="pri" onclick="mover('${esc(d.serial)}','${esc(d.estado)}','${esc(c.asignado)}')">Mover / asignar</button> `:''}<button onclick="editId('${esc(d.serial)}','${esc(d.telpo_id)}')">Editar ID Telpo</button> <button onclick="dlg.close()">Cerrar</button></p>
+  <p>${inst?`<button class="pri" onclick="retire('${esc(d.serial)}')">Retirar</button> `:['Disponible','Con técnico','En CAS','Enviado a Telpo','Retirado','Dañado'].includes(d.estado)?`<button class="pri" onclick="mover('${esc(d.serial)}','${esc(d.estado)}','${esc(c.asignado)}')">Mover / asignar</button> `:''}<button onclick="editId('${esc(d.serial)}','${esc(d.telpo_id)}')">Editar ID Telpo</button> <button onclick="dlg.close()">Cerrar</button></p>
   <details open><summary>Recorrido (${h.length} movimientos · ${d._i.dias_total} días activos en total)</summary>
-  <div class="wrap"><table><thead><tr><th>ID Telpo</th><th>Empresa</th><th>Coche</th><th>Asignado a</th><th>Dónde está</th><th>Instalación</th><th>Retiro</th><th>Días</th></tr></thead><tbody>`+
-  h.map(x=>`<tr><td>${esc(x.telpo_id)}</td><td>${esc(x.empresa)}</td><td>${esc(x.coche)}</td><td>${esc(x.asignado)}</td><td>${esc(x.donde)}</td><td>${fd(x.instalacion)}</td><td>${fd(x.retiro)}</td><td>${x.dias??''}</td></tr>`).join('')+
+  <div class="wrap"><table><thead><tr><th>ID Telpo</th><th>Empresa</th><th>Coche</th><th>Asignado a</th><th>Dónde está</th><th>Instalación</th><th>Retiro</th><th>Días</th><th>Envío a Telpo</th></tr></thead><tbody>`+
+  h.map(x=>`<tr><td>${esc(x.telpo_id)}</td><td>${esc(x.empresa)}</td><td>${esc(x.coche)}</td><td>${esc(x.asignado)}</td><td>${esc(x.donde)}</td><td>${fd(x.instalacion)}</td><td>${fd(x.retiro)}</td><td>${x.dias??''}</td><td>${x.donde.toUpperCase()==='TELPO'?esc((x.envio?'Enviado '+fd(x.envio):'Enviado')+(x.devolucion?' · devuelto '+fd(x.devolucion):'')+(x.obs?' · '+x.obs:'')):''}</td></tr>`).join('')+
   `</tbody></table></div></details>`;
   $('dlg').showModal();
 }
@@ -190,16 +190,26 @@ function retire(serial){
   $('frm').showModal();
 }
 function mover(serial,estado,tec){
-  const cur=estado==='En CAS'?'cas':estado==='Con técnico'?'tecnico':'disponible';
+  const cur={'En CAS':'cas','Con técnico':'tecnico','Enviado a Telpo':'telpo'}[estado]||'disponible';
+  const enTelpo=estado==='Enviado a Telpo';
+  const sel=v=>cur===v?' selected':'';
   $('frm').innerHTML=`<h2 style="margin-top:0">Mover ${esc(serial)}</h2><form class="f" id="ff">
   <label>¿Dónde está ahora?<select name="destino" id="fd">
-    <option value="tecnico"${cur==='tecnico'?' selected':''}>Con un técnico</option>
-    <option value="cas"${cur==='cas'?' selected':''}>En CAS (reparación)</option>
-    <option value="disponible"${cur==='disponible'?' selected':''}>Disponible (sin asignar)</option></select></label>
+    <option value="tecnico"${sel('tecnico')}>Con un técnico</option>
+    <option value="cas"${sel('cas')}>En CAS (reparación)</option>
+    <option value="telpo"${sel('telpo')}>Enviado a Telpo</option>
+    <option value="disponible"${sel('disponible')}>Disponible (sin asignar)</option></select></label>
   <div id="ft"><label>Técnico<select name="tecnico">${[...new Set([...(tec?[tec]:[]),...TEC])].sort().map(t=>`<option value="${esc(t)}"${t===tec?' selected':''}>${esc(t)}${TEC.includes(t)?'':' (no está en la lista)'}</option>`).join('')}</select></label>${TEC.length||tec?'':'<p class="err">No hay técnicos cargados. Cierra esto y agrégalos con el botón «Técnicos».</p>'}</div>
+  <div id="fx"><label><span id="flab">Fecha</span><input type="date" name="fecha" value="${todayStr()}"></label>
+  <label id="fobs">Observación (motivo, guía, etc.)<input name="observacion" maxlength="200" autocomplete="off"></label></div>
   <div class="err" id="fe"></div>
   <div><button class="pri">Guardar</button> <button type="button" onclick="frm.close()">Cancelar</button></div></form>`;
-  const sync=()=>{$('ft').style.display=$('fd').value==='tecnico'?'':'none'};
+  const sync=()=>{const v=$('fd').value;
+    $('ft').style.display=v==='tecnico'?'':'none';
+    // La fecha se pide al enviar a Telpo y también al sacarlo de ahí (devolución).
+    $('fx').style.display=v==='telpo'||(enTelpo&&v!=='telpo')?'':'none';
+    $('fobs').style.display=v==='telpo'?'':'none';
+    $('flab').textContent=v==='telpo'?'Fecha de envío':'Fecha de devolución'};
   $('fd').onchange=sync;sync();
   $('ff').onsubmit=async ev=>{ev.preventDefault();
     try{await post('/api/mover',{serial,...Object.fromEntries(new FormData(ev.target))});frm.close();dlg.close();load()}
